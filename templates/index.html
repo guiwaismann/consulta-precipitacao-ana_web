@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consulta de precipitação — ANA</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;background:#f3f6fa}*{box-sizing:border-box}body{margin:0;padding:28px 18px}.wrap{max-width:1100px;margin:auto}.panel{background:#fff;border:1px solid #dce3ec;border-radius:14px;padding:24px;box-shadow:0 6px 24px #1725540a}h1{font-size:1.55rem;margin:0 0 6px}p.sub{color:#64748b;margin:0 0 22px}.fields{display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:14px;align-items:end}label{display:block;font-weight:650;font-size:.9rem;margin-bottom:7px}input{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}input:focus{outline:2px solid #93c5fd;border-color:#2563eb}button{border:0;border-radius:8px;padding:11px 16px;font:inherit;font-weight:650;cursor:pointer}.primary{background:#155eef;color:white}.secondary{background:#e8eef7;color:#1e293b}.actions{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:24px 0 12px;flex-wrap:wrap}.status{color:#475569;font-size:.94rem}.error{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;border-radius:8px;padding:12px;margin-top:16px}.notice{color:#64748b;font-size:.85rem;margin-top:16px}.table-wrap{overflow:auto;max-height:58vh;border:1px solid #d7dee8;border-radius:9px}table{border-collapse:separate;border-spacing:0;width:100%;min-width:690px}thead{position:sticky;top:0;z-index:1}th{background:#e9edf3;text-align:left;font-size:.92rem;white-space:nowrap}th,td{padding:11px 14px;border-bottom:1px solid #e2e8f0}th button{width:100%;background:transparent;padding:2px;text-align:left;color:#172033;border-radius:4px}th button:hover{background:#dce5f1}tbody tr:nth-child(even){background:#f8fafc}tbody tr:hover{background:#eff6ff}td.num{text-align:right;font-variant-numeric:tabular-nums}.empty{padding:28px;text-align:center;color:#64748b}.count{font-weight:650;color:#334155}@media(max-width:760px){body{padding:14px 8px}.panel{padding:16px}.fields{grid-template-columns:1fr}.actions{align-items:flex-start}.actions button{width:100%}}
+</style>
+</head>
+<body><main class="wrap"><section class="panel">
+<h1>Consulta de precipitação — ANA</h1><p class="sub">Consulte os dados de chuva por estação e período.</p>
+<form method="post" id="search-form" autocomplete="off"><div class="fields">
+<div><label for="station">Código da estação</label><input id="station" name="station" inputmode="numeric" pattern="[0-9]+" required value="{{ station }}" placeholder="Ex.: 12345678"></div>
+<div><label for="start">Data inicial</label><input id="start" name="start" class="date-mask" inputmode="numeric" maxlength="10" required value="{{ start or '__/__/____' }}" aria-label="Data inicial, dia mês ano"></div>
+<div><label for="end">Data final</label><input id="end" name="end" class="date-mask" inputmode="numeric" maxlength="10" required value="{{ end or '__/__/____' }}" aria-label="Data final, dia mês ano"></div>
+<button class="primary" type="submit" id="search-btn">Consultar</button>
+</div></form>
+{% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+<div class="actions"><div class="status" id="status">{{ status }}</div><button class="secondary" id="export-btn" type="button" {% if not records %}disabled{% endif %}>Exportar CSV</button></div>
+{% if records %}<div class="table-wrap" tabindex="0" aria-label="Tabela de resultados com rolagem"><table id="results"><thead><tr>
+<th data-key="station"><button type="button">Código da estação <span class="arrow"></span></button></th><th data-key="date"><button type="button">Data <span class="arrow"></span></button></th><th data-key="time"><button type="button">Hora <span class="arrow"></span></button></th><th data-key="rain"><button type="button">Precipitação (mm) <span class="arrow"></span></button></th>
+</tr></thead><tbody>{% for r in records %}<tr><td>{{ r.station }}</td><td>{{ r.date }}</td><td>{{ r.time }}</td><td class="num">{{ r.rain }}</td></tr>{% endfor %}</tbody></table></div><div class="actions"><span class="count" id="count">{{ records|length }} registro(s)</span><span class="notice">Clique uma vez para crescente, duas para decrescente e três para remover a ordenação.</span></div>
+{% else %}<div class="empty">Os resultados da consulta aparecerão aqui.</div>{% endif %}
+<p class="notice">A consulta depende da disponibilidade da API da ANA e dos campos fornecidos pela estação. Este aplicativo é executado somente neste computador.</p>
+</section></main>
+<script>
+// Máscara de data: barras fixas e entrada apenas de dígitos.
+document.querySelectorAll('.date-mask').forEach(input=>{
+ const positions=[0,1,3,4,6,7,8,9];
+ function digits(){return input.value.replace(/\D/g,'').slice(0,8)}
+ function masked(d){return (d.slice(0,2).padEnd(2,'_')+'/'+d.slice(2,4).padEnd(2,'_')+'/'+d.slice(4,8).padEnd(4,'_')).slice(0,10)}
+ input.addEventListener('focus',()=>{if(!input.value)input.value='__/__/____';const p=input.value.indexOf('_');input.setSelectionRange(p<0?10:p,p<0?10:p)});
+ input.addEventListener('keydown',e=>{
+  if(['Tab','Shift','Control','Alt','ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+  if(e.key==='Backspace'||e.key==='Delete'){
+   e.preventDefault();let ds=digits(),start=input.selectionStart,end=input.selectionEnd;
+   let pos=start;if(start===end&&e.key==='Backspace')pos=Math.max(0,start-1);
+   let digitIndex=positions.filter(p=>p<pos).length;
+   if(start!==end){let removed=positions.filter(p=>p>=start&&p<end).length;ds=ds.slice(0,digitIndex)+ds.slice(digitIndex+removed)}else if(digitIndex>0){ds=ds.slice(0,digitIndex-1)+ds.slice(digitIndex)}
+   input.value=masked(ds);let target=positions[Math.min(Math.max(digitIndex-1,0),7)];input.setSelectionRange(target,target);return;
+  }
+  if(e.key.length===1){e.preventDefault();if(!/\d/.test(e.key))return;let ds=digits(),pos=input.selectionStart,idx=positions.filter(p=>p<pos).length;if(input.selectionStart!==input.selectionEnd){let a=positions.filter(p=>p<input.selectionStart).length,b=positions.filter(p=>p<input.selectionEnd).length;ds=ds.slice(0,a)+ds.slice(b);idx=a}if(idx>=8)return;ds=ds.slice(0,idx)+e.key+ds.slice(idx+1);input.value=masked(ds);let next=positions[Math.min(idx+1,7)];if(idx===7)next=10;input.setSelectionRange(next,next)}
+ });
+ input.addEventListener('paste',e=>{e.preventDefault();let ds=(e.clipboardData.getData('text').match(/\d/g)||[]).join('').slice(0,8);input.value=masked(ds)});
+});
+document.getElementById('search-form').addEventListener('submit',e=>{for(const id of ['start','end']){const el=document.getElementById(id);if(!/^\d{2}\/\d{2}\/\d{4}$/.test(el.value)){e.preventDefault();alert('Preencha as datas completas no formato DD/MM/AAAA.');el.focus();return}const [d,m,y]=el.value.split('/').map(Number);const dt=new Date(y,m-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==m-1||dt.getDate()!==d){e.preventDefault();alert('Informe uma data válida.');el.focus();return}}document.getElementById('search-btn').disabled=true;document.getElementById('search-btn').textContent='Consultando…'});
+const table=document.getElementById('results');
+if(table){
+ const originalRows=Array.from(table.tBodies[0].rows);let activeKey=null,clickCount=0;
+ const keys=['station','date','time','rain'];
+ function value(row,key){const cells=row.cells;const raw=cells[keys.indexOf(key)].textContent.trim();if(key==='date'){const m=raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?new Date(+m[3],+m[2]-1,+m[1]).getTime():0}if(key==='time')return raw;if(key==='rain'){const n=Number(raw.replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)?n:-Infinity}return raw.toLocaleLowerCase('pt-BR')}
+ function sort(key){if(activeKey!==key){activeKey=key;clickCount=1}else{clickCount=clickCount===3?1:clickCount+1}const headers=table.tHead.querySelectorAll('th');headers.forEach(th=>{th.querySelector('.arrow').textContent='';th.querySelector('button').setAttribute('aria-sort','none')});
+  if(clickCount===3){originalRows.forEach(r=>table.tBodies[0].appendChild(r));activeKey=null;clickCount=0;document.getElementById('status').textContent='Ordenação removida; ordem original restaurada.';return}
+  const ascending=clickCount===1;const rows=Array.from(table.tBodies[0].rows);rows.sort((a,b)=>{const av=value(a,key),bv=value(b,key);let cmp=av<bv?-1:av>bv?1:0;return ascending?cmp:-cmp});rows.forEach(r=>table.tBodies[0].appendChild(r));const th=Array.from(headers).find(x=>x.dataset.key===key);th.querySelector('.arrow').textContent=ascending?' ▲':' ▼';th.querySelector('button').setAttribute('aria-sort',ascending?'ascending':'descending');document.getElementById('status').textContent='Ordenação: '+th.querySelector('button').childNodes[0].textContent.trim()+' ('+(ascending?'crescente':'decrescente')+').'
+ }
+ table.tHead.querySelectorAll('th').forEach(th=>th.querySelector('button').addEventListener('click',()=>sort(th.dataset.key)));
+ document.getElementById('export-btn').addEventListener('click',()=>{const records=Array.from(table.tBodies[0].rows).map(row=>({station:row.cells[0].textContent.trim(),date:row.cells[1].textContent.trim(),time:row.cells[2].textContent.trim(),rain:row.cells[3].textContent.trim()}));const csv=[['Código da estação','Data','Hora','Precipitação (mm)'],...records.map(r=>[r.station,r.date,r.time,r.rain])].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='precipitacao_ana.csv';a.click();URL.revokeObjectURL(url)})
+}
+</script></body></html>
